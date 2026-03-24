@@ -1,6 +1,7 @@
 import os
 import time
 import gc
+import json
 import torch
 import numpy as np
 import torch.nn as nn
@@ -43,8 +44,7 @@ if not os.path.exists(TRANSFORMER_PATH):
 else:
     print("\n>> Local model weights found! Skipping download check.")
 
-# The image we just generated in the previous step
-INPUT_IMAGE_PATH = os.path.join(SCRIPT_DIR, "output_klein_4b_xpu.jpg")
+INPUT_IMAGE_PATH = os.path.join(SCRIPT_DIR, "input", "edit", "edit.png")
 
 
 # ==========================================
@@ -229,11 +229,26 @@ def edit_image(prompt: str, image_path: str, seed: int = 42, num_steps: int = 4)
     decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
 
     image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-    output_dir = os.path.join(SCRIPT_DIR, 'output')
+    output_dir = os.path.join(SCRIPT_DIR, 'output/edits')
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"edit_{int(time.time())}_{seed}.png")
     image.save(output_path)
+
+    metadata = {
+        'prompt': prompt,
+        'width': new_w if 'new_w' in locals() else w,
+        'height': new_h if 'new_h' in locals() else h,
+        'seed': seed,
+        'device': device,
+        'dtype': str(dtype),
+        'num_steps': num_steps,
+    }
+    metadata_path = os.path.splitext(output_path)[0] + '.json'
+    with open(metadata_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2)
+
     print(f"\n>> Success! Edited image saved to: {output_path}")
+    print(f">> Metadata saved to: {metadata_path}")
 
 
 def ask_num_steps():
