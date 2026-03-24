@@ -226,11 +226,11 @@ if __name__ == "__main__":
         print(f"   - Loaded {len(prompts)} prompt(s) from: {prompt_file}")
         return prompts
 
-    def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int = 42, output_path: str = None):
+    def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int = 42, num_steps: int = 4, output_path: str = None):
         device = 'xpu'
         dtype = torch.bfloat16
 
-        print(f"\n--- Starting Generation: '{prompt}' (seed={seed}) ---")
+        print(f"\n--- Starting Generation: '{prompt}' (seed={seed}, steps={num_steps}) ---")
 
         # do not set output_path here; let phase D assign timestamp + seed filename when output_path is None
 
@@ -269,7 +269,6 @@ if __name__ == "__main__":
         img_flat = img_flat.to(device, dtype=dtype)
         img_ids = img_ids.to(device)
 
-        num_steps = 4
         guidance = 1.0
         timesteps = get_schedule(num_steps, img_flat.shape[1])
 
@@ -312,7 +311,7 @@ if __name__ == "__main__":
 
         if output_path is None:
             timestamp = int(time.time())
-            output_path = os.path.join(output_dir, f"klein_{timestamp}_{seed}.png")
+            output_path = os.path.join(output_dir, f"gen_{timestamp}_{seed}.png")
         else:
             if not os.path.isabs(output_path):
                 output_path = os.path.join(output_dir, output_path)
@@ -326,6 +325,7 @@ if __name__ == "__main__":
             'seed': seed,
             'device': device,
             'dtype': str(dtype),
+            'num_steps': num_steps,
         }
         metadata_path = os.path.splitext(output_path)[0] + '.json'
         with open(metadata_path, 'w', encoding='utf-8') as f:
@@ -334,10 +334,22 @@ if __name__ == "__main__":
         print(f"\n>> Success! Image saved to: {output_path}")
         print(f">> Metadata saved to: {metadata_path}")
 
+    def ask_num_steps():
+        num_steps_input = input('Enter denoising steps [default 4]: ').strip() or '4'
+        try:
+            num_steps = int(num_steps_input)
+            if num_steps < 1:
+                raise ValueError
+        except ValueError:
+            print('Invalid steps entered. Defaulting to 4.')
+            num_steps = 4
+        return num_steps
+
     def run_flow():
         selected_device = detect_device()
         print('>> Device selected:', selected_device)
 
+        num_steps = ask_num_steps()
         user_prompt = input('Enter prompt (leave blank to use prompts/prompts.txt): ').strip()
         if not user_prompt:
             prompts = load_prompts_from_file()
@@ -359,16 +371,16 @@ if __name__ == "__main__":
                     except ValueError:
                         print('Invalid seed, using random')
                         seed = np.random.randint(0, 2**31 - 1)
-                    generate_image(prompt, seed=seed)
+                    generate_image(prompt, seed=seed, num_steps=num_steps)
                 else:
                     for _ in range(count):
                         seed = np.random.randint(0, 2**31 - 1)
-                        generate_image(prompt, seed=seed)
+                        generate_image(prompt, seed=seed, num_steps=num_steps)
                 return
 
             for prompt in prompts:
                 seed = np.random.randint(0, 2**31 - 1)
-                generate_image(prompt, seed=seed)
+                generate_image(prompt, seed=seed, num_steps=num_steps)
             return
 
         count_str = input('How many images to generate? [default 1]: ').strip() or '1'
@@ -387,10 +399,10 @@ if __name__ == "__main__":
             except ValueError:
                 print('Invalid seed, using random')
                 seed = np.random.randint(0, 2**31 - 1)
-            generate_image(user_prompt, seed=seed)
+            generate_image(user_prompt, seed=seed, num_steps=num_steps)
         else:
             for _ in range(count):
                 seed = np.random.randint(0, 2**31 - 1)
-                generate_image(user_prompt, seed=seed)
+                generate_image(user_prompt, seed=seed, num_steps=num_steps)
 
     run_flow()
