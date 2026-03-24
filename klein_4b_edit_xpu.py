@@ -1,4 +1,5 @@
 import os
+import time
 import gc
 import torch
 import numpy as np
@@ -107,11 +108,11 @@ def empty_cache_xpu():
 # ==========================================
 # 4. MAIN EDITING PIPELINE
 # ==========================================
-def edit_image(prompt: str, image_path: str, seed: int = 42):
+def edit_image(prompt: str, image_path: str, seed: int = 42, num_steps: int = 4):
     device = "xpu"
     dtype = torch.bfloat16
 
-    print(f"\n--- Starting Edit: '{prompt}' ---")
+    print(f"\n--- Starting Edit: '{prompt}' (seed={seed}, steps={num_steps}) ---")
 
     # --- PHASE A: Text Encoding ---
     print("\n>> [1/4] Loading Text Encoder (Qwen3-4B)...")
@@ -169,7 +170,6 @@ def edit_image(prompt: str, image_path: str, seed: int = 42):
     img_flat = img_flat.to(device, dtype=dtype)
     img_ids = img_ids.to(device)
 
-    num_steps = 4
     guidance = 1.0  # Keep this at 1.0 for the distilled Klein models
     timesteps = get_schedule(num_steps, img_flat.shape[1])
 
@@ -213,12 +213,26 @@ def edit_image(prompt: str, image_path: str, seed: int = 42):
     decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
 
     image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-    output_path = os.path.join(SCRIPT_DIR, "edited_klein_4b_xpu.jpg")
+    output_dir = os.path.join(SCRIPT_DIR, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"edit_{int(time.time())}_{seed}.png")
     image.save(output_path)
     print(f"\n>> Success! Edited image saved to: {output_path}")
 
 
-if __name__ == "__main__":
+def ask_num_steps():
+    num_steps_input = input('Enter denoising steps [default 4]: ').strip() or '4'
+    try:
+        num_steps = int(num_steps_input)
+        if num_steps < 1:
+            raise ValueError
+    except ValueError:
+        print('Invalid steps entered. Defaulting to 4.')
+        num_steps = 4
+    return num_steps
+
+
+def run_flow():
     if not os.path.exists(TRANSFORMER_PATH):
         print(f"ERROR: Cannot find Transformer at {TRANSFORMER_PATH}")
         exit(1)
@@ -228,6 +242,77 @@ if __name__ == "__main__":
         print("Make sure you run klein_4b_gen_xpu.py first to generate it!")
         exit(1)
 
-    # Let's change the color of the crystal we generated in the first script!
-    edit_prompt = "A highly detailed macro photography shot of a glowing RED crystal in a dark cave, cinematic lighting, 8k resolution"
-    edit_image(edit_prompt, image_path=INPUT_IMAGE_PATH)
+    num_steps = ask_num_steps()
+
+    user_prompt = input('Enter prompt (leave blank to use prompts/prompts.txt): ').strip()
+    if not user_prompt:
+        prompts_file = os.path.join(SCRIPT_DIR, 'prompts', 'prompts.txt')
+        if not os.path.exists(prompts_file):
+            prompts_file = os.path.join(SCRIPT_DIR, 'prompts.txt')
+        if not os.path.exists(prompts_file):
+            print('No prompts file found. Exiting.')
+            return
+
+        with open(prompts_file, 'r', encoding='utf-8') as f:
+            raw = [line.strip() for line in f.readlines()]
+        prompts = [line for line in raw if line and not line.startswith('#')]
+
+        if not prompts:
+            print('No valid prompts found in prompts file. Exiting.')
+            return
+
+        if len(prompts) == 1:
+            prompt = prompts[0]
+            count_str = input('Only one prompt loaded. How many edits to generate? [default 1]: ').strip() or '1'
+            try:
+                count = int(count_str)
+                if count < 1:
+                    raise ValueError
+            except ValueError:
+                print('Invalid number, defaulting to 1')
+                count = 1
+
+            if count == 1:
+                seed_input = input('Enter seed (leave blank for random): ').strip()
+                try:
+                    seed = int(seed_input) if seed_input else np.random.randint(0, 2**31 - 1)
+                except ValueError:
+                    print('Invalid seed, using random')
+                    seed = np.random.randint(0, 2**31 - 1)
+                edit_image(prompt, image_path=INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+            else:
+                for _ in range(count):
+                    seed = np.random.randint(0, 2**31 - 1)
+                    edit_image(prompt, image_path=INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+            return
+
+        for prompt in prompts:
+            seed = np.random.randint(0, 2**31 - 1)
+            edit_image(prompt, image_path=INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+        return
+
+    count_str = input('How many edits to generate? [default 1]: ').strip() or '1'
+    try:
+        count = int(count_str)
+        if count < 1:
+            raise ValueError
+    except ValueError:
+        print('Invalid number, defaulting to 1')
+        count = 1
+
+    if count == 1:
+        seed_input = input('Enter seed (leave blank for random): ').strip()
+        try:
+            seed = int(seed_input) if seed_input else np.random.randint(0, 2**31 - 1)
+        except ValueError:
+            print('Invalid seed, using random')
+            seed = np.random.randint(0, 2**31 - 1)
+        edit_image(user_prompt, image_path=INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+    else:
+        for _ in range(count):
+            seed = np.random.randint(0, 2**31 - 1)
+            edit_image(user_prompt, image_path=INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+
+
+if __name__ == "__main__":
+    run_flow()
