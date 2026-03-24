@@ -1,5 +1,7 @@
 import os
 import gc
+import json
+import time
 import torch
 import numpy as np
 import torch.nn as nn
@@ -9,9 +11,9 @@ from safetensors.torch import load_file as load_sft
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Import the core math and architecture components from the BFL reference code
-from flux2.model import Flux2, Klein4BParams
-from flux2.autoencoder import AutoEncoder, AutoEncoderParams
-from flux2.sampling import get_schedule, denoise, batched_prc_txt, batched_prc_img
+from klein.model import Flux2, Klein4BParams
+from klein.autoencoder import AutoEncoder, AutoEncoderParams
+from klein.sampling import get_schedule, denoise, batched_prc_txt, batched_prc_img
 
 # ==========================================
 # 1. AUTOMATIC PATH RESOLUTION & DOWNLOAD
@@ -230,8 +232,7 @@ if __name__ == "__main__":
 
         print(f"\n--- Starting Generation: '{prompt}' (seed={seed}) ---")
 
-        if output_path is None:
-            output_path = os.path.join(SCRIPT_DIR, f"output_klein_4b_xpu_{seed}.jpg")
+        # do not set output_path here; let phase D assign timestamp + seed filename when output_path is None
 
         # --- PHASE A: Text Encoding ---
         print("\n>> [1/3] Loading Text Encoder (Qwen3-4B)...")
@@ -306,8 +307,32 @@ if __name__ == "__main__":
         decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
 
         image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
+        output_dir = os.path.join(SCRIPT_DIR, 'output')
+        os.makedirs(output_dir, exist_ok=True)
+
+        if output_path is None:
+            timestamp = int(time.time())
+            output_path = os.path.join(output_dir, f"klein_{timestamp}_{seed}.png")
+        else:
+            if not os.path.isabs(output_path):
+                output_path = os.path.join(output_dir, output_path)
+
         image.save(output_path)
+
+        metadata = {
+            'prompt': prompt,
+            'width': width,
+            'height': height,
+            'seed': seed,
+            'device': device,
+            'dtype': str(dtype),
+        }
+        metadata_path = os.path.splitext(output_path)[0] + '.json'
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2)
+
         print(f"\n>> Success! Image saved to: {output_path}")
+        print(f">> Metadata saved to: {metadata_path}")
 
     def run_flow():
         selected_device = detect_device()
@@ -316,10 +341,34 @@ if __name__ == "__main__":
         user_prompt = input('Enter prompt (leave blank to use prompts/prompts.txt): ').strip()
         if not user_prompt:
             prompts = load_prompts_from_file()
-            for idx, prompt in enumerate(prompts, start=1):
+            if len(prompts) == 1:
+                prompt = prompts[0]
+                count_str = input('Only one prompt loaded. How many images to generate with this prompt? [default 1]: ').strip() or '1'
+                try:
+                    count = int(count_str)
+                    if count < 1:
+                        raise ValueError
+                except ValueError:
+                    print('Invalid number, defaulting to 1')
+                    count = 1
+
+                if count == 1:
+                    seed_input = input('Enter seed (leave blank for random): ').strip()
+                    try:
+                        seed = int(seed_input) if seed_input else np.random.randint(0, 2**31 - 1)
+                    except ValueError:
+                        print('Invalid seed, using random')
+                        seed = np.random.randint(0, 2**31 - 1)
+                    generate_image(prompt, seed=seed)
+                else:
+                    for _ in range(count):
+                        seed = np.random.randint(0, 2**31 - 1)
+                        generate_image(prompt, seed=seed)
+                return
+
+            for prompt in prompts:
                 seed = np.random.randint(0, 2**31 - 1)
-                output_path = os.path.join(SCRIPT_DIR, f'output_klein_4b_xpu_{idx}.jpg')
-                generate_image(prompt, seed=seed, output_path=output_path)
+                generate_image(prompt, seed=seed)
             return
 
         count_str = input('How many images to generate? [default 1]: ').strip() or '1'
@@ -338,11 +387,10 @@ if __name__ == "__main__":
             except ValueError:
                 print('Invalid seed, using random')
                 seed = np.random.randint(0, 2**31 - 1)
-            generate_image(user_prompt, seed=seed, output_path=os.path.join(SCRIPT_DIR, f'output_klein_4b_xpu_{seed}.jpg'))
+            generate_image(user_prompt, seed=seed)
         else:
-            for i in range(1, count + 1):
+            for _ in range(count):
                 seed = np.random.randint(0, 2**31 - 1)
-                output_path = os.path.join(SCRIPT_DIR, f'output_klein_4b_xpu_{i}.jpg')
-                generate_image(user_prompt, seed=seed, output_path=output_path)
+                generate_image(user_prompt, seed=seed)
 
     run_flow()
