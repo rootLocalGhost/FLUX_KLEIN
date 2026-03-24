@@ -258,11 +258,11 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int
     decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
 
     image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-    output_dir = os.path.join(SCRIPT_DIR, 'output')
+    output_dir = os.path.join(SCRIPT_DIR, 'outputs', 'gen_lora')
     os.makedirs(output_dir, exist_ok=True)
 
     if output_path is None:
-        output_path = os.path.join(output_dir, f"gen_{int(time.time())}_{seed}.png")
+        output_path = os.path.join(output_dir, f"gen_lora_{int(time.time())}_{seed}.png")
     else:
         if not os.path.isabs(output_path):
             output_path = os.path.join(output_dir, output_path)
@@ -275,8 +275,6 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int
         'height': height,
         'seed': seed,
         'num_steps': num_steps,
-        'lora_path': lora_path,
-        'lora_alpha': lora_alpha,
         'device': device,
         'dtype': str(dtype),
     }
