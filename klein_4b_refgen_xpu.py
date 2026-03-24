@@ -1,4 +1,5 @@
 import os
+import time
 import gc
 import torch
 import numpy as np
@@ -107,11 +108,11 @@ def empty_cache_xpu():
 # ==========================================
 # 4. MAIN REF-GEN PIPELINE
 # ==========================================
-def generate_from_reference(prompt: str, image_path: str, seed: int = 42):
+def generate_from_reference(prompt: str, image_path: str, seed: int = 42, num_steps: int = 4):
     device = "xpu"
     dtype = torch.bfloat16
 
-    print(f"\n--- Starting Ref-Gen: '{prompt}' ---")
+    print(f"\n--- Starting Ref-Gen: '{prompt}' (seed={seed}, steps={num_steps}) ---")
 
     # --- PHASE A: Text Encoding ---
     print("\n>> [1/4] Loading Text Encoder (Qwen3-4B)...")
@@ -167,7 +168,6 @@ def generate_from_reference(prompt: str, image_path: str, seed: int = 42):
     img_flat = img_flat.to(device, dtype=dtype)
     img_ids = img_ids.to(device)
 
-    num_steps = 4
     guidance = 1.0
     timesteps = get_schedule(num_steps, img_flat.shape[1])
 
@@ -210,12 +210,109 @@ def generate_from_reference(prompt: str, image_path: str, seed: int = 42):
     decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
 
     image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-    output_path = os.path.join(SCRIPT_DIR, "refgen_klein_4b_xpu.jpg")
+    output_dir = os.path.join(SCRIPT_DIR, 'output')
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"refgen_{int(time.time())}_{seed}.png")
     image.save(output_path)
-    print(f"\n>> Success! Reference-generated image saved to: {output_path}")
+    print(f"\n>> Success! RefGen image saved to: {output_path}")
+
+
+def ask_num_steps():
+    num_steps_input = input('Enter denoising steps [default 4]: ').strip() or '4'
+    try:
+        num_steps = int(num_steps_input)
+        if num_steps < 1:
+            raise ValueError
+    except ValueError:
+        print('Invalid steps entered. Defaulting to 4.')
+        num_steps = 4
+    return num_steps
+
+
+def run_flow():
+    if not os.path.exists(TRANSFORMER_PATH):
+        print(f"ERROR: Cannot find Transformer at {TRANSFORMER_PATH}")
+        exit(1)
+
+    if not os.path.exists(INPUT_IMAGE_PATH):
+        print(f"ERROR: Cannot find the reference image at {INPUT_IMAGE_PATH}")
+        print("Make sure you run klein_4b_edit_xpu.py first to generate it!")
+        exit(1)
+
+    num_steps = ask_num_steps()
+
+    user_prompt = input('Enter prompt (leave blank to use prompts/prompts.txt): ').strip()
+    if not user_prompt:
+        prompts_file = os.path.join(SCRIPT_DIR, 'prompts', 'prompts.txt')
+        if not os.path.exists(prompts_file):
+            prompts_file = os.path.join(SCRIPT_DIR, 'prompts.txt')
+        if not os.path.exists(prompts_file):
+            print('No prompts file found. Exiting.')
+            return
+
+        with open(prompts_file, 'r', encoding='utf-8') as f:
+            raw = [line.strip() for line in f.readlines()]
+        prompts = [line for line in raw if line and not line.startswith('#')]
+
+        if not prompts:
+            print('No valid prompts found in prompts file. Exiting.')
+            return
+
+        if len(prompts) == 1:
+            prompt = prompts[0]
+            count_str = input('Only one prompt loaded. How many images to generate? [default 1]: ').strip() or '1'
+            try:
+                count = int(count_str)
+                if count < 1:
+                    raise ValueError
+            except ValueError:
+                print('Invalid number, defaulting to 1')
+                count = 1
+
+            if count == 1:
+                seed_input = input('Enter seed (leave blank for random): ').strip()
+                try:
+                    seed = int(seed_input) if seed_input else np.random.randint(0, 2**31 - 1)
+                except ValueError:
+                    print('Invalid seed, using random')
+                    seed = np.random.randint(0, 2**31 - 1)
+                generate_from_reference(prompt, INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+            else:
+                for _ in range(count):
+                    seed = np.random.randint(0, 2**31 - 1)
+                    generate_from_reference(prompt, INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+            return
+
+        for prompt in prompts:
+            seed = np.random.randint(0, 2**31 - 1)
+            generate_from_reference(prompt, INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+        return
+
+    count_str = input('How many images to generate? [default 1]: ').strip() or '1'
+    try:
+        count = int(count_str)
+        if count < 1:
+            raise ValueError
+    except ValueError:
+        print('Invalid number, defaulting to 1')
+        count = 1
+
+    if count == 1:
+        seed_input = input('Enter seed (leave blank for random): ').strip()
+        try:
+            seed = int(seed_input) if seed_input else np.random.randint(0, 2**31 - 1)
+        except ValueError:
+            print('Invalid seed, using random')
+            seed = np.random.randint(0, 2**31 - 1)
+        generate_from_reference(user_prompt, INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
+    else:
+        for _ in range(count):
+            seed = np.random.randint(0, 2**31 - 1)
+            generate_from_reference(user_prompt, INPUT_IMAGE_PATH, seed=seed, num_steps=num_steps)
 
 
 if __name__ == "__main__":
+    run_flow()
     if not os.path.exists(TRANSFORMER_PATH):
         print(f"ERROR: Cannot find Transformer at {TRANSFORMER_PATH}")
         exit(1)
