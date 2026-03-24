@@ -113,92 +113,7 @@ def empty_cache_xpu():
 
 # ==========================================
 # 4. MAIN GENERATION PIPELINE
-# ==========================================
-def generate_image(prompt: str, width: int = 1024, height: int = 1024, seed: int = 42):
-    device = "xpu"
-    dtype = torch.bfloat16
-
-    print(f"\n--- Starting Generation: '{prompt}' ---")
-
-    # --- PHASE A: Text Encoding ---
-    print("\n>> [1/3] Loading Text Encoder (Qwen3-4B)...")
-    text_encoder = LocalQwen3Embedder(device="cpu")
-    text_encoder.model.to(device)
-
-    print(">> Generating text embeddings...")
-    with torch.no_grad(), torch.autocast(device_type="xpu", dtype=dtype):
-        txt_hidden_states = text_encoder([prompt])
-        txt, txt_ids = batched_prc_txt(txt_hidden_states)
-        txt = txt.to(device, dtype=dtype)
-        txt_ids = txt_ids.to(device)
-
-    print(">> Unloading Text Encoder to free VRAM...")
-    del text_encoder
-    empty_cache_xpu()
-
-    # --- PHASE B: Transformer (DiT) Denoising ---
-    print("\n>> [2/3] Loading FLUX.2 Transformer...")
-    print(f"   -> Loading weights from: {TRANSFORMER_PATH}")
-
-    with torch.device("meta"):
-        model = Flux2(Klein4BParams()).to(dtype)
-    sd = load_sft(TRANSFORMER_PATH, device=device)
-    model.load_state_dict(sd, strict=True, assign=True)
-    model = model.to(device)
-
-    print(">> Preparing initial noise latents...")
-    torch.manual_seed(seed)
-    h_latent, w_latent = height // 16, width // 16
-    img = torch.randn(1, 128, h_latent, w_latent, dtype=dtype, device=device)
-
-    img_flat, img_ids = batched_prc_img(img)
-    img_flat = img_flat.to(device, dtype=dtype)
-    img_ids = img_ids.to(device)
-
-    num_steps = 4
-    guidance = 1.0
-    timesteps = get_schedule(num_steps, img_flat.shape[1])
-
-    print(f">> Denoising for {num_steps} steps...")
-    with torch.no_grad(), torch.autocast(device_type="xpu", dtype=dtype):
-        img_flat = denoise(
-            model, img_flat, img_ids, txt, txt_ids, timesteps, guidance=guidance
-        )
-
-    print(">> Unloading Transformer to free VRAM...")
-    del model
-    del sd
-    empty_cache_xpu()
-
-    # --- PHASE C: Autoencoder Decoding ---
-    print("\n>> [3/3] Loading Autoencoder...")
-    print(f"   -> Loading weights from: {VAE_PATH}")
-    img_latent = rearrange(img_flat, "b (h w) c -> b c h w", h=h_latent, w=w_latent)
-
-    with torch.device("meta"):
-        ae = AutoEncoder(AutoEncoderParams()).to(dtype)
-    sd_ae = load_sft(VAE_PATH, device=device)
-    ae.load_state_dict(sd_ae, strict=True, assign=True)
-    ae = ae.to(device)
-
-    print(">> Decoding latent to image...")
-    with torch.no_grad(), torch.autocast(device_type="xpu", dtype=dtype):
-        decoded = ae.decode(img_latent)
-
-    print(">> Unloading Autoencoder...")
-    del ae
-    del sd_ae
-    empty_cache_xpu()
-
-    # --- PHASE D: Save Output ---
-    decoded = (decoded / 2 + 0.5).clamp(0, 1)
-    decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
-
-    image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-    output_path = os.path.join(SCRIPT_DIR, "output_klein_4b_xpu.jpg")
-    image.save(output_path)
-    print(f"\n>> Success! Image saved to: {output_path}")
-
+# (legacy per-call generate_image removed; batch flow below)
 
 if __name__ == "__main__":
     if not os.path.exists(TRANSFORMER_PATH):
@@ -316,7 +231,7 @@ if __name__ == "__main__":
         decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()
 
         image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
-        output_dir = os.path.join(SCRIPT_DIR, 'output')
+        output_dir = os.path.join(SCRIPT_DIR, 'output/gen')
         os.makedirs(output_dir, exist_ok=True)
 
         if output_path is None:
