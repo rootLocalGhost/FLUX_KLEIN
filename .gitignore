@@ -14,9 +14,8 @@ venv/
 .idea/
 
 # Generations
-*.png
-*.jpg
-*.jpeg
+output/
 
-# Ignore the massive model weights (These go to Hugging Face, not Git)
+# Ignore the massive model weights and loras (These go to Hugging Face, not Git)
 model/
+loras/
