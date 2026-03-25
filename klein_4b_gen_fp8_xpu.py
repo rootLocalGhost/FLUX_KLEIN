@@ -9,6 +9,7 @@ from PIL import Image
 from einops import rearrange
 from safetensors.torch import load_file as load_sft
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import snapshot_download
 
 # Import the core math and architecture components from the BFL reference code
 from klein.model_fp8 import Flux2, Klein4BParams
@@ -232,7 +233,7 @@ if __name__ == "__main__":
 
         image = Image.fromarray((decoded[0] * 255).astype(np.uint8))
 
-        output_dir = os.path.join(SCRIPT_DIR, 'outputs', 'gen_fp8')
+        output_dir = os.path.join(SCRIPT_DIR, 'output', 'gen_fp8')
         os.makedirs(output_dir, exist_ok=True)
 
         if output_path is None:

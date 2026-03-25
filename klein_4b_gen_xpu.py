@@ -9,6 +9,7 @@ from PIL import Image
 from einops import rearrange
 from safetensors.torch import load_file as load_sft
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import snapshot_download
 
 # Import the core math and architecture components from the BFL reference code
 from klein.model import Flux2, Klein4BParams
