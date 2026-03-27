@@ -15,8 +15,8 @@ from klein.autoencoder import AutoEncoder, AutoEncoderParams
 from klein.sampling import get_schedule, denoise, batched_prc_txt, batched_prc_img
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(SCRIPT_DIR, "model", "FLUX.2-klein-4B-FP16")
-TRANSFORMER_PATH = os.path.join(MODEL_DIR, "transformer_merged", "flux-2-klein-4b.safetensors")
+MODEL_DIR = os.path.join(SCRIPT_DIR, "models", "FLUX.2-klein-4B-FP16")
+TRANSFORMER_PATH = os.path.join(MODEL_DIR, "transformer", "flux-2-klein-4b.safetensors")
 VAE_PATH = os.path.join(MODEL_DIR, "autoencoder", "ae.safetensors")
 TEXT_ENCODER_DIR = os.path.join(MODEL_DIR, "text_encoder")
 TOKENIZER_DIR = os.path.join(MODEL_DIR, "tokenizer")

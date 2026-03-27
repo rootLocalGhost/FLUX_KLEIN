@@ -17,7 +17,7 @@ venv/
 output/
 
 # Ignore the massive model weights and loras (These go to Hugging Face, not Git)
-model/
+models/
 loras/
 
 # Ignore prompt changes for now

@@ -42,9 +42,9 @@ if torch_load_file is None and numpy_load_file is None:
 
 def main():
     root_dir = Path(__file__).resolve().parent.parent
-    model_dir = root_dir / "model" / "FLUX.2-klein-4B-FP16"
+    model_dir = root_dir / "models" / "FLUX.2-klein-4B-FP16"
     src_dir = model_dir / "text_encoder"
-    merged_dir = model_dir / "text_encoder_merged"
+    merged_dir = src_dir
     quant_dir = model_dir / "text_encoder_quantized"
 
     merged_dir.mkdir(parents=True, exist_ok=True)

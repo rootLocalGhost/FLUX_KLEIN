@@ -18,9 +18,9 @@ from safetensors.torch import load_file, save_file
 
 BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
-MODEL_DIR = ROOT_DIR / "model" / "FLUX.2-klein-4B-FP16"
+MODEL_DIR = ROOT_DIR / "models" / "FLUX.2-klein-4B-FP16"
 TEXT_ENCODER_DIR = MODEL_DIR / "text_encoder"
-TEXT_ENCODER_MERGED_DIR = MODEL_DIR / "text_encoder_merged"
+TEXT_ENCODER_MERGED_DIR = TEXT_ENCODER_DIR
 TEXT_ENCODER_QUANT_DIR = MODEL_DIR / "text_encoder_quantized"
 OUTPUT_FILE = TEXT_ENCODER_QUANT_DIR / "text-encoder-fp8.safetensors"
 OUTPUT_INDEX_FILE = TEXT_ENCODER_QUANT_DIR / "model.safetensors.index.json"

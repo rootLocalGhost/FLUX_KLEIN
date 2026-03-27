@@ -20,9 +20,9 @@ from klein.sampling import get_schedule, denoise, batched_prc_txt, batched_prc_i
 # 1. AUTOMATIC PATH RESOLUTION & DOWNLOAD
 # ==========================================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(SCRIPT_DIR, "model", "FLUX.2-klein-4B-FP8")
+MODEL_DIR = os.path.join(SCRIPT_DIR, "models", "FLUX.2-klein-4B-FP8")
 
-TRANSFORMER_PATH = os.path.join(MODEL_DIR, "transformer_quantized", "flux-2-klein-4b-fp8.safetensors")
+TRANSFORMER_PATH = os.path.join(MODEL_DIR, "transformer", "flux-2-klein-4b-fp8.safetensors")
 VAE_PATH = os.path.join(MODEL_DIR, "autoencoder", "ae.safetensors")
 TEXT_ENCODER_DIR = os.path.join(MODEL_DIR, "text_encoder")
 TOKENIZER_DIR = os.path.join(MODEL_DIR, "tokenizer")
